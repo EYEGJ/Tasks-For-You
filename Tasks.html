@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>To-Do List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #taskInput, #priorityInput, #dueDateInput, #dueTimeInput, #notesInput, #filterStatus, #sortCriteria, #usernameInput, #passwordInput {
+            padding: 10px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 10px;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            background: #fff;
+            margin: 5px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            transition: background-color 0.3s ease;
+            cursor: grab;
+        }
+
+        li.dragging {
+            opacity: 0.5;
+        }
+
+        li.high { background-color: #ffcccc; }
+        li.medium { background-color: #ffffcc; }
+        li.low { background-color: #ccffcc; }
+
+        li.completed {
+            text-decoration: line-through;
+        }
+
+        .task-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .task-due, .task-time, .task-notes {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .edit-btn, .remove-btn {
+            background: red;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .edit-btn {
+            background: blue;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+
+        .checkbox {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>To-Do List</h1>
+
+    <div id="loginForm">
+        <input type="text" id="usernameInput" placeholder="Enter your username">
+        <input type="password" id="passwordInput" placeholder="Enter your password">
+        <button onclick="createAccount()">Create Account</button>
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div id="app" style="display: none;">
+        <input type="text" id="taskInput" placeholder="Add a new task...">
+        <select id="priorityInput">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+        </select>
+        <input type="date" id="dueDateInput">
+        <input type="time" id="dueTimeInput">
+        <input type="text" id="notesInput" placeholder="Add notes...">
+        <button onclick="addTask()">Add</button>
+        <br>
+        <select id="filterStatus" onchange="filterTasks()">
+            <option value="all">All</option>
+            <option value="completed">Completed</option>
+            <option value="pending">Pending</option>
+        </select>
+        <select id="sortCriteria" onchange="sortTasks()">
+            <option value="priority">Sort by Priority</option>
+            <option value="duedate">Sort by Due Date            
+<option value="duedate">Sort by Due Date</option>
+            <option value="duetime">Sort by Due Time</option>
+        </select>
+        <ul id="taskList" ondrop="drop(event)" ondragover="allowDrop(event)"></ul>
+    </div>
+
+    <script>
+        let users = {};
+        let currentUser = null;
+
+        function createAccount() {
+            const username = document.getElementById('usernameInput').value;
+            const password = document.getElementById('passwordInput').value;
+
+            if (username && password) {
+                if (!users[username]) {
+                    users[username] = { password: password, tasks: [] };
+                    alert('Account created successfully!');
+                    loginUser(username);
+                    alert('Hello! Add a task to begin!')
+                } else {
+                    alert('Username already exists. Please choose a different username.');
+                }
+            } else {
+                alert('Please enter both username and password.');
+            }
+        }
+
+        function login() {
+            const username = document.getElementById('usernameInput').value;
+            const password = document.getElementById('passwordInput').value;
+
+            if (users[username] && users[username].password === password) {
+                loginUser(username);
+                alert('Hello! Welcome back!')
+            } else {
+                alert('Invalid username or password.');
+            }
+        }
+
+        function loginUser(username) {
+            currentUser = username;
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            loadTasks();
+        }
+
+        function addTask() {
+            const taskInput = document.getElementById('taskInput');
+            const priorityInput = document.getElementById('priorityInput');
+            const dueDateInput = document.getElementById('dueDateInput');
+            const dueTimeInput = document.getElementById('dueTimeInput');
+            const notesInput = document.getElementById('notesInput');
+            const taskList = document.getElementById('taskList');
+
+            if (taskInput.value.trim() !== '') {
+                const li = document.createElement('li');
+                li.className = priorityInput.value;
+                li.draggable = true;
+                li.ondragstart = drag;
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'checkbox';
+                checkbox.onchange = function () {
+                    if (this.checked) {
+                        li.classList.add('completed');
+                    } else {
+                        li.classList.remove('completed');
+                    }
+                    saveTasks();
+                };
+
+                const taskDetails = document.createElement('div');
+                taskDetails.className = 'task-details';
+                const taskName = document.createElement('span');
+                taskName.textContent = taskInput.value;
+                taskDetails.appendChild(taskName);
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'edit-btn';
+                editBtn.textContent = 'Edit';
+                editBtn.onclick = function () {
+                    editTask(li, taskName);
+                };
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn';
+                removeBtn.textContent = 'Remove';
+                removeBtn.onclick = function () {
+                    li.remove();
+                    saveTasks();
+                };
+
+                taskDetails.prepend(checkbox);
+                taskDetails.appendChild(editBtn);
+                taskDetails.appendChild(removeBtn);
+
+                const taskDue = document.createElement('div');
+                taskDue.className = 'task-due';
+                taskDue.textContent = dueDateInput.value ? `Due: ${dueDateInput.value}` : '';
+
+                const taskTime = document.createElement('div');
+                taskTime.className = 'task-time';
+                taskTime.textContent = dueTimeInput.value ? `Time: ${dueTimeInput.value}` : '';
+
+                const taskNotes = document.createElement('div');
+                taskNotes.className = 'task-notes';
+                taskNotes.textContent = notesInput.value ? `Notes: ${notesInput.value}` : '';
+
+                li.appendChild(taskDetails);
+                li.appendChild(taskDue);
+                li.appendChild(taskTime);
+                li.appendChild(taskNotes);
+                taskList.appendChild(li);
+
+                saveTasks();
+
+                taskInput.value = '';
+                priorityInput.value = 'low';
+                dueDateInput.value = '';
+                dueTimeInput.value = '';
+                notesInput.value = '';
+                setTimeout(() => {
+                    li.style.backgroundColor = '';
+                }, 300);
+            }
+        }
+
+        function editTask(taskElement, taskName) {
+            const newTask = prompt("Edit your task:", taskName.textContent);
+            if (newTask !== null && newTask.trim() !== '') {
+                taskName.textContent = newTask;
+                saveTasks();
+            }
+        }
+
+        function filterTasks() {
+            const filterStatus = document.getElementById('filterStatus').value;
+            const tasks = document.querySelectorAll('#taskList li');
+            tasks.forEach(task => {
+                switch (filterStatus) {
+                    case 'all':
+                        task.style.display = '';
+                        break;
+                    case 'completed':
+                        task.style.display = task.classList.contains('completed') ? '' : 'none';
+                        break;
+                    case 'pending':
+                        task.style.display = task.classList.contains('completed') ? 'none' : '';
+                        break;
+                }
+            });
+        }
+
+        function sortTasks() {
+            const sortCriteria = document.getElementById('sortCriteria').value;
+            const taskList = document.getElementById('taskList');
+            const tasks = Array.from(taskList.children);
+            tasks.sort((a, b) => {
+                let aValue, bValue;
+                switch (sortCriteria) {
+                    case 'priority':
+                        aValue = a.classList.contains('high') ? 1 : a.classList.contains('medium') ? 2 : 3;
+                        bValue = b.classList.contains('high') ? 1 : b.classList.contains('medium') ? 2 : 3;
+                        return aValue - bValue;
+                    case 'duedate':
+                        aValue = a.querySelector('.task-due').textContent.replace('Due: ', '');
+                        bValue = b.querySelector('.task-due').textContent.replace('Due: ', '');
+                        return new Date(aValue) - new Date(bValue);
+                    case 'duetime':
+                        aValue = a.querySelector('.task-time').textContent.replace('Time: ', '');
+                        bValue = b.querySelector('.task-time').textContent.replace('Time: ', '');
+                        return aValue.localeCompare(bValue);
+                }
+            });
+            tasks.forEach(task => taskList.appendChild(task));
+        }
+
+        function drag(event) {
+            event.dataTransfer.setData("text", event.target.id);
+            setTimeout(() => {
+                event.target.classList.add('dragging');
+            }, 0);
+        }
+
+        function allowDrop(event) {
+            event.preventDefault();
+        }
+
+        function drop(event) {
+            event.preventDefault();
+            const data = event.dataTransfer.getData("text");
+            const draggedElement = document.getElementById(data);
+            const taskList = document.getElementById('taskList');
+            taskList.insertBefore(draggedElement, event.target.closest('li'));
+            draggedElement.classList.remove('dragging');
+            saveTasks();
+        }
+
+        function saveTasks() {
+            if (currentUser) {
+                const tasks = Array.from(document.querySelectorAll('#taskList li')).map(task => ({
+                    text: task.querySelector('.task-details span').textContent,
+                    priority: task.className.replace('dragging', '').trim(),
+                    dueDate: task.querySelector('.task-due').textContent.replace('Due: ', ''),
+                    dueTime: task.querySelector('.task-time').textContent.replace('Time: ', ''),
+                    notes: task.querySelector('.task-notes').textContent.replace('Notes: ', ''),
+                    completed: task.classList.contains('completed')
+                }));
+                users[currentUser].tasks = tasks;
+                localStorage.setItem('users', JSON.stringify(users));
+            }
+        }
+
+        function loadTasks() {
+            if (currentUser) {
+                const userTasks = users[currentUser].tasks;
+                userTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = task.priority;
+                    li.draggable = true;
+                    li.ondragstart = drag;
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'checkbox';
+                    checkbox.checked = task.completed;
+                    checkbox.onchange = function () {
+                        if (this.checked) {
+                            li.classList.add('completed');
+                        } else {
+                            li.classList.remove('completed');
+                        }
+                        saveTasks();
+                    };
+
+                    const taskDetails = document.createElement('div');
+                    taskDetails.className = 'task-details';
+                    const taskName = document.createElement('span');
+                    taskName.textContent = task.text;
+                    taskDetails.appendChild(taskName);
+
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'edit-btn';
+                    editBtn.textContent = 'Edit';
+                    editBtn.onclick = function () {
+                        editTask(li, taskName);
+                    };
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'remove-btn';
+                    removeBtn.textContent = 'Remove';
+                    removeBtn.onclick = function () {
+                        li.remove();
+                        saveTasks();
+                    };
+
+                    taskDetails.prepend(checkbox);
+                    taskDetails.appendChild(editBtn);
+                    taskDetails.appendChild(removeBtn);
+
+                    const taskDue = document.createElement('div');
+                    taskDue.className = 'task-due';
+                    taskDue.textContent = task.dueDate ? `Due: ${task.dueDate}` : '';
+
+                    const taskTime = document.createElement('div');
+                    taskTime.className = 'task-time';
+                    taskTime.textContent = task.dueTime ? `Time: ${task.dueTime}` : '';
+
+                    const taskNotes = document.createElement('div');
+                    taskNotes.className = 'task-notes';
+                    taskNotes.textContent = task.notes ? `Notes: ${task.notes}` : '';
+
+                    li.appendChild(taskDetails);
+                    li.appendChild(taskDue);
+                    li.appendChild(taskTime);
+                    li.appendChild(taskNotes);
+                    document.getElementById('taskList').appendChild(li);
+                });
+            }
+        }
+
+        window.onload = function () {
+            if (localStorage.getItem('users')) {
+                users = JSON.parse(localStorage.getItem('users'));
+            }
+        };
+    </script>
+</html>
